@@ -53,20 +53,36 @@ class provision(Module):
                 if line.split()[2] not in dbs:
                     if not text:
                         return dbs
-
                     ret = [d for d in dbs if d.startswith(text)]
                 else:
                     tables = self.get_tables(dbs)
-                    table = line.split()[2]
+                    db = line.split()[2]
                     if not text:
-                        return tables[table]
-                    ret = [t for t in tables[table] if t.startswith(text)]
+                        return tables[db]
+                    ret = [t for t in tables[db] if t.startswith(text)]
             else:
                 tables = self.get_tables(dbs)
-                table = line.split()[2]
-                if not text:
-                    return tables[table]
-                ret = [t for t in tables[table] if t.startswith(text)]
+                db = line.split()[2]
+                if len(line.split()) == 4:
+                    if line.split()[3] not in tables[db]:
+                        if not text:
+                            return tables[db]
+                        ret = [t for t in tables[db] if t.startswith(text)]
+                    else:
+                        table = line.split()[3]
+                        columns = self.get_columns(table, command)
+                        if not text:
+                            return columns
+                        ret = [c for c in columns if c.startswith(text)]
+                else:
+                    table = line.split()[3]
+                    columns = self.get_columns(table,command)
+                    if len(line.split()) >= 4 and line.split()[4] in columns:
+                        ret = ['']
+                    else:
+                        if not text:
+                            return columns
+                        ret = [c for c in columns if c.startswith(text)]
         return ret or ['']
 
     def __get_methods__(self):
