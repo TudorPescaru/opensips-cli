@@ -43,26 +43,30 @@ class provision(Module):
         """
         autocompletion method in interactive mode
         """
-        dbs = self.get_tables()
+        dbs = self.get_files()
         if len(line.split()) < 3:
             if not text:
-                return list(dbs.keys())
-            ret = [d for d in dbs.keys() if d.startswith(text)]
+                return dbs
+            ret = [d for d in dbs if d.startswith(text)]
         else:
             if len(line.split()) == 3:
-                if line.split()[2] not in dbs.keys():
+                if line.split()[2] not in dbs:
                     if not text:
-                        return list(dbs.keys())
+                        return dbs
 
-                    ret = [d for d in dbs.keys() if d.startswith(text)]
+                    ret = [d for d in dbs if d.startswith(text)]
                 else:
+                    tables = self.get_tables(dbs)
+                    table = line.split()[2]
                     if not text:
-                        return dbs[line.split()[2]]
-                    ret = [t for t in dbs[line.split()[2]] if t.startswith(text)]
+                        return tables[table]
+                    ret = [t for t in tables[table] if t.startswith(text)]
             else:
+                tables = self.get_tables(dbs)
+                table = line.split()[2]
                 if not text:
-                    return dbs[line.split()[2]]
-                ret = [t for t in dbs[line.split()[2]] if t.startswith(text)]
+                    return tables[table]
+                ret = [t for t in tables[table] if t.startswith(text)]
         return ret or ['']
 
     def __get_methods__(self):
@@ -87,13 +91,13 @@ class provision(Module):
         db_list = sorted(db_list)
         return db_list
 
-    def get_tables(self):
+    def get_tables(self, db_list):
         """
         method that retrieves available tables
         """
         fpath = os.path.join(DEFAULT_DB_PATH, "pi_framework.xml")
         tree = ElementTree.parse(fpath)
-        table_dict = {i: [] for i in self.get_files()}
+        table_dict = {i: [] for i in db_list}
         tables = tree.findall('mod/mod_name')
         for db in table_dict.keys():
             path = os.path.join(DEFAULT_DB_PATH, db + "-mod")
@@ -102,6 +106,26 @@ class provision(Module):
                     if table.text in f.read():
                         table_dict[db].append(table.text)
         return table_dict
+
+    def get_columns(self, table_name, cmd):
+        """
+        method that retireves available columns in a table
+        """
+        fpath = os.path.join(DEFAULT_DB_PATH, "pi_framework.xml")
+        tree = ElementTree.parse(fpath)
+        dbs = tree.findall('mod')
+        table_cols = []
+        for db in dbs:
+            table = db.find('mod_name')
+            if table.text == table_name:
+                commands = db.findall('cmd')
+                for command in commands:
+                    cmd_name = command.find('cmd_name')
+                    if cmd_name.text == cmd:
+                        cols = command.findall('query_cols/col/field')
+                        for col in cols:
+                            table_cols.append(col.text)
+        return table_cols
 
     def do_show(self, params=None):
         
