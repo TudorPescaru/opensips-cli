@@ -20,9 +20,7 @@
 from opensipscli.module import Module
 from opensipscli.logger import logger
 from opensipscli.config import cfg
-from opensipscli.db import (
-        osdb, osdbError
-)
+from opensipscli import comm
 
 import os
 from xml.etree import ElementTree
@@ -43,7 +41,10 @@ class provision(Module):
         """
         autocompletion method in interactive mode
         """
-        dbs = self.get_files()
+        modules = comm.execute('pi_list')
+        dbs = []
+        for key, value in modules.items():
+            dbs.append(key)
         if len(line.split()) < 3:
             if not text:
                 return dbs
@@ -71,18 +72,21 @@ class provision(Module):
                     else:
                         table = line.split()[3]
                         columns = self.get_columns(table, command)
+                        if command != 'show':
+                            columns = [c + '=' for c in columns]
                         if not text:
                             return columns
                         ret = [c for c in columns if c.startswith(text)]
                 else:
                     table = line.split()[3]
                     columns = self.get_columns(table,command)
-                    if len(line.split()) >= 4 and line.split()[4] in columns:
-                        ret = ['']
-                    else:
-                        if not text:
-                            return columns
-                        ret = [c for c in columns if c.startswith(text)]
+                    if command != 'show':
+                        columns = [c + '=' for c in columns]
+                    if not text:
+                        return columns
+                    ret = [c for c in columns if c.startswith(text)]
+        if len(ret) == 1 and ret[0][-1] != '=':
+            ret[0] = ret[0] + ' '
         return ret or ['']
 
     def __get_methods__(self):
@@ -111,12 +115,12 @@ class provision(Module):
         """
         method that retrieves available tables
         """
-        fpath = os.path.join(DEFAULT_DB_PATH, "pi_framework.xml")
+        fpath = os.path.join(DEFAULT_DB_PATH, 'pi_framework.xml')
         tree = ElementTree.parse(fpath)
         table_dict = {i: [] for i in db_list}
         tables = tree.findall('mod/mod_name')
         for db in table_dict.keys():
-            path = os.path.join(DEFAULT_DB_PATH, db + "-mod")
+            path = os.path.join(DEFAULT_DB_PATH, db + '-mod')
             for table in tables:
                 with open(path) as f:
                     if table.text in f.read():
@@ -127,7 +131,7 @@ class provision(Module):
         """
         method that retireves available columns in a table
         """
-        fpath = os.path.join(DEFAULT_DB_PATH, "pi_framework.xml")
+        fpath = os.path.join(DEFAULT_DB_PATH, 'pi_framework.xml')
         tree = ElementTree.parse(fpath)
         dbs = tree.findall('mod')
         table_cols = []
@@ -138,6 +142,10 @@ class provision(Module):
                 for command in commands:
                     cmd_name = command.find('cmd_name')
                     if cmd_name.text == cmd:
+                        if cmd == 'update':
+                            ccols = command.findall('clause_cols/col/field')
+                            for ccol in ccols:
+                                table_cols.append('update.' + ccol.text)
                         cols = command.findall('query_cols/col/field')
                         for col in cols:
                             table_cols.append(col.text)
