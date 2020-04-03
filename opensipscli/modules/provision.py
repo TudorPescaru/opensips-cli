@@ -24,6 +24,7 @@ from opensipscli import comm
 
 import os
 from xml.etree import ElementTree
+from collections import OrderedDict
 
 DEFAULT_DB_PATH = "/usr/share/opensips/pi_http"
 
@@ -39,12 +40,10 @@ class provision(Module):
 
     def __complete__(self, command, text, line, begidx, endidx):
         """
-        autocompletion method in interactive mode
+        helper method for autocompletion in interactive mode
         """
         modules = comm.execute('pi_list')
-        dbs = []
-        for key, value in modules.items():
-            dbs.append(key)
+        dbs = [key for key, value in modules.items()]
         if len(line.split()) < 3:
             if not text:
                 return dbs
@@ -142,17 +141,28 @@ class provision(Module):
                 for command in commands:
                     cmd_name = command.find('cmd_name')
                     if cmd_name.text == cmd:
-                        if cmd == 'update':
+                        if cmd == 'update' or cmd == 'delete':
                             ccols = command.findall('clause_cols/col/field')
-                            for ccol in ccols:
-                                table_cols.append('update.' + ccol.text)
+                            if cmd == 'update':
+                                for ccol in ccols:
+                                    table_cols.append('update.' + ccol.text)
+                            else:
+                                for ccol in ccols:
+                                    table_cols.append('delete.' + ccol.text)
                         cols = command.findall('query_cols/col/field')
                         for col in cols:
                             table_cols.append(col.text)
         return table_cols
 
     def do_show(self, params=None):
-        
+        """
+        method that implements the show command
+        """
+        command_obj = OrderedDict()
+        command_obj["command"] = "show"
+        command_obj["module"] = ""
+        command_obj["table"] = ""
+        command_obj["values"] = []
         if len(params) < 1:
             db_name = cfg.read_param(None,
                       "Please provide the database you want to display from")
@@ -161,6 +171,7 @@ class provision(Module):
                 return -1
         else:
            db_name = params[0]
+        command_obj["module"] = db_name
 
         if len(params) < 2:
             table_name = cfg.read_param(None,
@@ -170,18 +181,29 @@ class provision(Module):
                 return -1
         else:
             table_name = params[1]
+        command_obj["table"] = table_name
 
         if len(params) < 3:
-            col_name = cfg.read_param(None,
-                       "Please provide the column you want to display from")
-            if not col_name:
+            col_names = cfg.read_param(None,
+                       "Please provide at least a column to display from")
+            if not col_names:
                 logger.warning("no column to show!")
                 return -1
         else:
-            col_name = params[2]
+            col_names = params[2:]
+        command_obj["values"] = [c for c in col_names]
+        
+        return command_obj
 
     def do_add(self, params=None):
-
+        """
+        method that implements add command
+        """
+        command_obj = OrderedDict()
+        command_obj["command"] = "add"
+        command_obj["module"] = ""
+        command_obj["table"] = ""
+        command_obj["values"] = OrderedDict()
         if len(params) < 1:
             db_name = cfg.read_param(None,
                       "Please provide the database you want to add to")
@@ -190,6 +212,7 @@ class provision(Module):
                 return -1
         else:
             db_name = params[0]
+        command_obj["module"] = db_name
 
         if len(params) < 2:
             table_name = cfg.read_param(None,
@@ -199,27 +222,32 @@ class provision(Module):
                 return -1
         else:
             table_name = params[1]
+        command_obj["table"] = table_name
 
         if len(params) < 3:
-            col_name = cfg.read_param(None,
-                       "Please provide the column you want to add to")
-            if not col_name:
+            col_names = cfg.read_param(None,
+                       "Please provide at least a column you want to add to
+                                                                (<column>=<>)")
+            if not col_names:
                 logger.warning("no column to add!")
                 return -1
         else:
-            col_name = params[2]
-
-        if len(params) < 4:
-            cmd_input = cfg.read_param(None,
-                        "Please provide an input for your command")
-            if not cmd_input:
-                logger.warning("no input given!")
-                return -1
-        else:
-            cmd_input = params[3]
+            col_names = params[2:]
+        for col in col_names:
+            command_obj["values"][col.split('=')[0]] = col.split('=')[1]
+        
+        return command_obj
 
     def do_update(self, params=None):
-
+        """
+        method that implements update command
+        """
+        command_obj = OrderedDict()
+        command_obj["command"] = "update"
+        command_obj["module"] = ""
+        command_obj["table"] = ""
+        command_obj["update.id"] = ""
+        command_obj["values"] = OrderedDict()
         if len(params) < 1:
             db_name = cfg.read_param(None,
                       "Please provide the database you want to update")
@@ -228,6 +256,7 @@ class provision(Module):
                 return -1
         else:
             db_name = params[0]
+        command_obj["module"] = db_name
 
         if len(params) < 2:
             table_name = cfg.read_param(None,
@@ -237,27 +266,41 @@ class provision(Module):
                 return -1
         else:
             table_name = params[1]
+        command_obj["table"] = table_name
 
         if len(params) < 3:
-            col_name = cfg.read_param(None,
-                       "Please provide the column you want to update")
-            if not col_name:
-                logger.warning("no column to update")
+            update_id = cfg.read_param(None,
+                       "Please provide the id you want to update(update.id=<>)")
+            if not update_id:
+                logger.warning("no id to update")
                 return -1
         else:
-            col_name = params[2]
+            update_id = params[2]
+        command_obj["update.id"] = update_id.split('=')[1]
 
         if len(params) < 4:
-            cmd_input = cfg.read_param(None,
-                        "Please provide an input for your command")
-            if not cmd_input:
-                logger.warning("no input given!")
+            col_names = cfg.read_param(None,
+                        "Please provide at least a column you want to update
+                                                                (<column>=<>)")
+            if not col_names:
+                logger.warning("no column to update!")
                 return -1
         else:
-            cmd_input = params[3]
+            col_names = params[3:]
+        for col in col_names:
+            command_obj["values"][col.split('=')[0]] = col.split('=')[1]
+        
+        return command_obj
 
     def do_delete(self, params=None):
-
+        """
+        method that implements delete command
+        """        
+        command_obj = OrderedDict()
+        command_obj["command"] = "delete"
+        command_obj["module"] = ""
+        command_obj["table"] = ""
+        command_obj["delete.id"] = ""
         if len(params) < 1:
             db_name = cfg.read_param(None,
                       "Please provide the database you want to delete from")
@@ -266,6 +309,7 @@ class provision(Module):
                 return -1
         else:
             db_name = params[0]
+        command_obj["module"] = db_name
 
         if len(params) < 2:
             table_name = cfg.read_param(None,
@@ -275,13 +319,17 @@ class provision(Module):
                 return -1
         else:
             table_name = params[1]
+        command_obj["table"] = table_name
 
         if len(params) < 3:
-            col_name = cfg.read_param(None,
-                       "Please provide the column you want to delete from")
-            if not col_name:
-                logger.warning("no column to delete!")
+            delete_id = cfg.read_param(None,
+                       "Please provide the id you want to delete(update.id=<>)")
+            if not delete_id:
+                logger.warning("no id to delete!")
                 return -1
         else:
-            col_name = params[2]
+            delete_id = params[2]
+        command_obj["delete.id"] = delete_id.split('=')[1]
+        
+        return command_obj
 
